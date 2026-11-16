@@ -1,0 +1,5 @@
+mesa==3.5.1
+solara==1.64.1
+matplotlib==3.11.2
+gdown==6.4.2
+numpy==2.5.4
