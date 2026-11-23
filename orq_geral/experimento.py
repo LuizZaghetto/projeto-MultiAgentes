@@ -20,7 +20,7 @@ def rodar_experimento(modulo, nome_modo, num_jogos=100, max_steps=1000):
     print(f"\nIniciando simulação de {num_jogos} jogos [{nome_modo}]...")
 
     for i in range(1, num_jogos + 1):
-        modelo = modulo.Modelo(n_pred=5, n_presa=18, verbose=False)
+        modelo = modulo.Modelo(verbose=False)
 
         while True:
             total_pred = sum(1 for a in modelo.agents if isinstance(a, modulo.AgentePredador))

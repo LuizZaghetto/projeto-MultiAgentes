@@ -1,83 +1,148 @@
 # Projeto MultiAgentes
 
-Simulação de um sistema multiagente de predadores (gatos) e presas (ratos), desenvolvida em Python com Mesa. O projeto oferece interfaces interativas com Solara e experimentos em lote para observar a sobrevivência dos agentes.
+Simulação de predadores (gatos) e presas (ratos) em Python, desenvolvida com Mesa. O projeto reúne cinco modelos, três interfaces em Solara e experimentos em lote para comparar a sobrevivência e o comportamento dos agentes.
 
 ## Modelos
 
-- **Movimento aleatório:** gatos e ratos escolhem células vizinhas aleatoriamente.
-- **Perseguição coordenada:** um orquestrador direciona os gatos à presa mais próxima, considerando as posições reservadas pelos demais gatos; os ratos se movem aleatoriamente.
-- **Perseguição com fuga:** os gatos seguem o orquestrador e os ratos tentam se afastar dos gatos detectados em uma área de 3×3 células.
+| Arquitetura | Decisão dos gatos | Comportamento dos ratos |
+|---|---|---|
+| Random walk | Movimento aleatório entre vizinhos sem outro gato | Aleatório |
+| Central | Orquestrador com visão global e distribuição de alvos | Aleatório |
+| Central com fuga | Mesmo orquestrador central | Fuga ao detectar gatos na área 3×3 |
+| Individual | Cada gato escolhe a presa visível mais próxima, com alcance de 3 células | Aleatório |
+| Individual com fuga | Mesma decisão individual, sem negociação de alvos entre gatos | Fuga ao detectar gatos na área 3×3 |
 
-O ambiente é um grid de 10×10 células, sem conexão entre bordas. A cada turno, os ratos agem primeiro e os gatos depois. Os gatos gastam energia, recuperam energia ao capturar presas e podem morrer de fome.
+O orquestrador central prioriza presas ainda sem um gato designado. Quando todas já têm um predador atribuído, permite compartilhar alvos. No modelo individual, vários gatos podem perseguir a mesma presa.
 
-## Estrutura
-
-```text
-orq_geral/
-  app.py                # Interface dos dois modelos coordenados
-  modelo.py             # Perseguição com ratos aleatórios
-  modelo_fuga_rato.py    # Perseguição com ratos que fogem
-  experimento.py        # Experimentos dos modelos coordenados
-  gato.png
-  rato.png
-random_walk/
-  app_rw.py             # Interface do movimento aleatório
-  modelo_rw.py          # Modelo de movimento aleatório
-  experimento_rw.py     # Experimentos do movimento aleatório
-  gato.png
-  rato.png
-requirements.txt
-```
+Todos utilizam um grid 10×10, sem conexão entre bordas, com movimentos nas oito direções. Os ratos agem primeiro e os gatos depois, em ordem aleatória dentro de cada grupo. Cada gato pode capturar no máximo uma presa por turno.
 
 ## Instalação
 
-O ambiente de desenvolvimento utilizado tem Python 3.14. Execute os comandos abaixo na raiz do projeto.
+O ambiente de desenvolvimento utiliza Python 3.14. Na raiz do projeto, execute:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-No Linux e no macOS, substitua `.\.venv\Scripts\python.exe` por `.venv/bin/python` e `.\.venv\Scripts\solara.exe` por `.venv/bin/solara` nos comandos.
+No Linux e no macOS, substitua `.\.venv\Scripts\python.exe` por `.venv/bin/python` e `.\.venv\Scripts\solara.exe` por `.venv/bin/solara` nos comandos abaixo.
 
-## Interfaces interativas
+## Interfaces visuais
 
-Para os modelos com perseguição coordenada:
+Execute uma interface por vez e abra o endereço exibido no terminal.
 
 ```powershell
+# Orquestrador central
 .\.venv\Scripts\solara.exe run orq_geral/app.py
-```
 
-Para o modelo de movimento aleatório:
+# Decisão individual
+.\.venv\Scripts\solara.exe run orq_individual/app.py
 
-```powershell
+# Random walk
 .\.venv\Scripts\solara.exe run random_walk/app_rw.py
 ```
 
-Abra no navegador o endereço exibido no terminal. As interfaces permitem avançar um turno e reiniciar a simulação. A interface coordenada também permite alternar entre ratos aleatórios e ratos com fuga.
+As interfaces central e individual permitem alternar entre ratos aleatórios e ratos com fuga. Os controles compartilhados são:
 
-As imagens já estão incluídas no projeto. Se uma imagem estiver ausente, a interface tenta baixá-la do Google Drive.
+- **Reproduzir / Pausar:** avança automaticamente a cada 0,4 segundo.
+- **Avançar:** executa um turno.
+- **+5 turnos:** executa até cinco turnos, parando se a partida terminar.
+- **Reiniciar:** inicia outra partida no modo selecionado.
+- **Alvos:** mostra ou oculta as linhas de perseguição nas interfaces central e individual.
+
+Durante a partida, o tabuleiro permanece centralizado, com grid e coordenadas visíveis. Os números junto aos gatos indicam energia; os dos ratos, peso. Cada sessão do navegador mantém sua própria partida.
+
+Os gráficos aparecem somente após o encerramento. Em telas largas, o tabuleiro encolhe e os resultados ocupam a área principal ao lado; em telas menores, ficam abaixo do tabuleiro reduzido. São apresentados:
+
+- Resultado, capturas, gatos sobreviventes e energia média final.
+- Evolução das populações e da energia média dos gatos.
+- Gatos por alvo nos modelos de perseguição ou capturas acumuladas no random walk.
+
+A partida termina quando não restam presas, não restam predadores ou o limite de 1.000 turnos é atingido. O avanço fica bloqueado após o encerramento. Trocar de modo inicia uma nova partida.
+
+Para encerrar o servidor, pressione **Ctrl+C** no terminal. As imagens já estão incluídas; se estiverem ausentes, a interface tenta baixá-las do Google Drive.
+
+## Regras compartilhadas
+
+As regras comuns aos cinco modelos estão em `regras_comuns.py`.
+
+| Parâmetro | Valor padrão |
+|---|---|
+| Predadores iniciais | 5 |
+| Presas iniciais | 18 |
+| Energia inicial por gato | 15 |
+| Peso dos ratos | Inteiro de 5 a 9 |
+| Gasto de energia por turno | `max(2, int(energia / 10))` |
+| Nutrição da presa | `2 + int(peso)` |
+| Custo de abate | `int(peso * 0.8)` |
+| Ganho líquido da captura | `max(5, nutrição - custo_abate)` |
+
+O custo de abate é descontado no cálculo do ganho, sem uma cobrança adicional. Com os pesos atuais, cada captura concede 5 unidades de energia. O gasto do turno acontece mesmo se o gato não conseguir se mover. A morte por energia menor ou igual a zero é verificada depois da oportunidade de captura.
+
+Não há reprodução nem consumo de energia pelos ratos. As células começam sem sobreposição; durante a simulação, ratos podem compartilhar células, enquanto os gatos evitam entrar em células já ocupadas por outro gato.
+
+As interfaces e os experimentos usam as quantidades padrão dos modelos. Para alterar a população em conjunto, edite `N_PREDADORES` e `N_PRESAS` em `regras_comuns.py` antes de iniciar a aplicação. O arquivo também centraliza as dimensões do grid, energia inicial, pesos, consumo, alimentação, captura e morte. As estratégias de movimento e escolha dos alvos permanecem nos respectivos modelos.
 
 ## Experimentos em lote
 
-Cada opção executa 100 jogos, com limite de 1.000 turnos por jogo.
+Os experimentos de cada pasta executam 100 partidas, com limite de 1.000 turnos por partida, sem semente fixa. Os resultados são apresentados no terminal.
 
 ```powershell
-# Movimento aleatório
+# Random walk
 .\.venv\Scripts\python.exe -m random_walk.experimento_rw
 
-# Perseguição coordenada com ratos aleatórios
-.\.venv\Scripts\python.exe -m orq_geral.experimento 1
-
-# Perseguição coordenada com ratos que fogem
-.\.venv\Scripts\python.exe -m orq_geral.experimento 2
-
-# Executar os dois modelos coordenados
+# Central: 1 = ratos aleatórios; 2 = fuga; 3 = ambos
 .\.venv\Scripts\python.exe -m orq_geral.experimento 3
+
+# Individual: 1 = ratos aleatórios; 2 = fuga; 3 = ambos
+.\.venv\Scripts\python.exe -m orq_individual.experimento 3
 ```
 
-Os resultados são apresentados no terminal e incluem vitórias dos predadores, vitórias das presas, empates por limite de turnos e duração média dos jogos. Os modelos coordenados também informam a energia média dos predadores sobreviventes nas vitórias.
+São calculadas vitórias dos gatos, vitórias dos ratos, empates por limite de turnos e duração média. Os experimentos central e individual também informam a energia média dos gatos sobreviventes nas vitórias.
 
-## Parâmetros atuais
+### Comparação entre arquiteturas
 
-O experimento de movimento aleatório utiliza 5 gatos e 30 ratos. Os experimentos coordenados utilizam 5 gatos e 18 ratos. As regras de gasto e recuperação de energia também diferem entre esses grupos; considere essas diferenças ao comparar os resultados. Os experimentos usam aleatoriedade sem uma semente fixa.
+```powershell
+.\.venv\Scripts\python.exe experimento_comparativo.py
+```
+
+Esse script executa 100 partidas para cada um dos quatro modelos de perseguição, totalizando 400. Utiliza sementes de 1 a 100 para repetir as condições iniciais entre as arquiteturas. O random walk não está incluído nesse comparativo.
+
+Além das vitórias, registra duração, energia dos sobreviventes, gatos por alvo, dispersão dos gatos e tempo médio por turno. Salva, na pasta de execução:
+
+- `resultados_comparativos.csv`: tabela consolidada.
+- `comparativo_arquiteturas.png`: gráficos comparativos.
+
+Executar o script substitui esses dois arquivos. Os tempos dependem da máquina e não incluem o custo da coleta de métricas ao final de cada turno. A comparação também envolve uma diferença de informação: o central tem visão global e o individual tem alcance de 3 células. A métrica de gatos por alvo no individual pode incluir referências a presas capturadas por outro gato no mesmo turno.
+
+## Estrutura
+
+```text
+orq_geral/
+  app.py                      # Interface central
+  modelo.py                   # Ratos aleatórios
+  modelo_fuga_rato.py          # Ratos com fuga
+  experimento.py
+  gato.png
+  rato.png
+orq_individual/
+  app.py                      # Interface individual
+  modelo.py                   # Ratos aleatórios
+  modelo_fuga_rato.py          # Ratos com fuga
+  experimento.py
+  gato.png
+  rato.png
+random_walk/
+  app_rw.py                   # Interface de movimento aleatório
+  modelo_rw.py
+  experimento_rw.py
+  gato.png
+  rato.png
+regras_comuns.py               # Regras e inicialização dos cinco modelos
+interface_comum.py             # Estado e componentes das interfaces
+interface.css                  # Estilos compartilhados e layout final
+experimento_comparativo.py     # Comparação dos quatro modelos de perseguição
+resultados_comparativos.csv
+comparativo_arquiteturas.png
+requirements.txt
+```

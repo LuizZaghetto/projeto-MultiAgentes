@@ -1,0 +1,5 @@
+Arquitetura,Presa,Jogos,Vitorias_Pred_%,Vitorias_Presa_%,Timeouts,Turnos_Medio_Geral,Turnos_Medio_Vitoria_Pred,Energia_Media_Sobreviventes,Redundancia_Gatos_Por_Alvo,Dispersao_Media_Grid,Tempo_Medio_Step_ms
+Orquestrador,Rato Aleatório,100,98.0,2.0,0,12.8,12.6,11.8,1.57,3.81,0.4507
+Orquestrador,Rato Fuga 3x3,100,62.0,38.0,0,19.5,16.9,9.5,1.44,3.42,0.4688
+Individual,Rato Aleatório,100,81.0,19.0,0,14.9,13.2,11.7,1.37,4.06,0.3046
+Individual,Rato Fuga 3x3,100,41.0,59.0,0,20.3,16.3,10.2,1.39,3.52,0.3495

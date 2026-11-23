@@ -17,7 +17,7 @@ def rodar_experimento(num_jogos=100, max_steps=1000):
 
     for i in range(1, num_jogos + 1):
         # Cada jogo ganha uma seed diferente ou usa a aleatoriedade padrão do Mesa
-        modelo = Modelo(n_pred=5, n_presa=30, verbose=False)
+        modelo = Modelo(verbose=False)
 
         while True:
             # Condições de parada

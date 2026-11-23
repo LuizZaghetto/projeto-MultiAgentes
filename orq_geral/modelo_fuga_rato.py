@@ -1,26 +1,27 @@
+from pathlib import Path
+import sys
+
+# Permite executar os scripts diretamente a partir de suas pastas.
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from regras_comuns import (
+    N_PREDADORES, N_PRESAS, PredadorBase, PresaBase, inicializar_populacao,
+)
+
+import time
 import mesa
 
 
-class AgentePredador(mesa.discrete_space.CellAgent):
+class AgentePredador(PredadorBase):
     def __init__(self, model, energy):
-        super().__init__(model)
-        self.energy = energy
+        super().__init__(model, energy)
         self.proxima_celula = None
         self.alvo_atual = None
 
-    def eat(self, presa):
-        nutricao = 2 + int(presa.peso)
-        custo_abate = int(presa.peso * 0.8)
-        ganho_liquido = max(5, nutricao - custo_abate)
-
-        self.energy += ganho_liquido
-        if self.model.verbose:
-            print(f"[CAPTURA] Gato {self.unique_id} devorou Presa {presa.unique_id}...")
-        presa.remove()
-
     def step(self):
-        # Custo proporcional com mínimo de 1 para evitar que ele fique travado com 1 de energia para sempre
-        self.energy -= max(2, int(self.energy / 10))
+        # Custo proporcional com mínimo de 2 para evitar que ele fique travado com 1 de energia para sempre
+        self.consumir_energia()
 
         # Filtra vizinhos que NÃO possuem outro predador
         vizinhos_sem_gato = [
@@ -43,25 +44,12 @@ class AgentePredador(mesa.discrete_space.CellAgent):
             if vizinhos_sem_gato:
                 self.cell = self.random.choice(vizinhos_sem_gato)
 
-        presas_aqui = [
-            a for a in self.model.agents
-            if isinstance(a, AgentePresa) and a.cell == self.cell
-        ]
+        self.capturar_presa(AgentePresa)
 
-        if presas_aqui:
-            self.eat(presas_aqui[0])
-
-        if self.energy <= 0:
-            if self.model.verbose:
-                print(f"[MORTE] Predador {self.unique_id} morreu de fome.")
-            self.remove()
+        self.verificar_inanicao()
 
 
-class AgentePresa(mesa.discrete_space.CellAgent):
-    def __init__(self, model, weight):
-        super().__init__(model)
-        self.peso = weight
-
+class AgentePresa(PresaBase):
     def _distancia_chebyshev(self, coord1, coord2):
         return max(abs(coord1[0] - coord2[0]), abs(coord1[1] - coord2[1]))
 
@@ -104,29 +92,60 @@ class AgentePresa(mesa.discrete_space.CellAgent):
 
 
 class Modelo(mesa.Model):
-    def __init__(self, n_pred=5, n_presa=30, verbose=False, **kwargs):
+    def __init__(self, n_pred=N_PREDADORES, n_presa=N_PRESAS, verbose=False, **kwargs):
         super().__init__(**kwargs)
         self.verbose = verbose
-        self.grid = mesa.discrete_space.OrthogonalMooreGrid((10, 10), torus=False, random=self.random)
+        self.tempo_ultimo_step_ms = 0.0
+        inicializar_populacao(self, AgentePredador, AgentePresa, n_pred, n_presa)
 
-        total_agentes = n_pred + n_presa
-        total_celulas = self.grid.width * self.grid.height
-        if total_agentes > total_celulas:
-            raise ValueError(f"O grid ({total_celulas} células) não comporta {total_agentes} agentes sem sobreposição.")
-
-        initial_energy = 15
-        initial_weight = self.rng.integers(5, 10, size=n_presa)
-
-        for agent in AgentePredador.create_agents(self, n_pred, initial_energy):
-            agent.cell = self.grid.empties.select_random_cell()
-
-        for agent in AgentePresa.create_agents(self, n_presa, initial_weight):
-            agent.cell = self.grid.empties.select_random_cell()
-
+        # Orquestra alvos iniciais antes da coleta do turno 0
         self.orquestrar_predadores()
+
+        # Configuração do DataCollector para análise das métricas
+        self.datacollector = mesa.DataCollector(
+            model_reporters={
+                "Presas_Vivas": lambda m: sum(1 for a in m.agents if isinstance(a, AgentePresa)),
+                "Predadores_Vivos": lambda m: sum(1 for a in m.agents if isinstance(a, AgentePredador)),
+                "Energia_Media_Predadores": self._calcular_energia_media,
+                "Redundancia_Alvos": self._calcular_redundancia_alvos,
+                "Dispersao_Predadores": self._calcular_dispersao_predadores,
+                "Tempo_Step_ms": lambda m: m.tempo_ultimo_step_ms,
+            }
+        )
+        self.datacollector.collect(self)
 
     def _distancia_chebyshev(self, coord1, coord2):
         return max(abs(coord1[0] - coord2[0]), abs(coord1[1] - coord2[1]))
+
+    def _calcular_energia_media(self):
+        predadores = [a for a in self.agents if isinstance(a, AgentePredador)]
+        if not predadores:
+            return 0.0
+        return sum(p.energy for p in predadores) / len(predadores)
+
+    def _calcular_redundancia_alvos(self):
+        """Média de predadores perseguindo o mesmo alvo (1.0 = coordenação perfeita sem conflito)."""
+        alvos = [
+            a.alvo_atual for a in self.agents
+            if isinstance(a, AgentePredador) and getattr(a, "alvo_atual", None) is not None
+        ]
+        if not alvos:
+            return 0.0
+        return len(alvos) / len(set(alvos))
+
+    def _calcular_dispersao_predadores(self):
+        """Distância média de Chebyshev entre todos os pares de predadores vivos."""
+        predadores = [a for a in self.agents if isinstance(a, AgentePredador)]
+        n = len(predadores)
+        if n < 2:
+            return 0.0
+        distancias = [
+            max(abs(predadores[i].cell.coordinate[0] - predadores[j].cell.coordinate[0]),
+                abs(predadores[i].cell.coordinate[1] - predadores[j].cell.coordinate[1]))
+            for i in range(n)
+            for j in range(i + 1, n)
+        ]
+        return sum(distancias) / len(distancias)
 
     def orquestrar_predadores(self):
         predadores = [a for a in self.agents if isinstance(a, AgentePredador)]
@@ -138,15 +157,32 @@ class Modelo(mesa.Model):
                 predador.proxima_celula = None
             return
 
-        celulas_reservadas = {p.cell for p in predadores}
+        # Ordena os predadores para que quem já está mais perto de alguma presa escolha primeiro
+        predadores_ordenados = sorted(
+            predadores,
+            key=lambda pred: min(
+                self._distancia_chebyshev(pred.cell.coordinate, presa.cell.coordinate)
+                for presa in presas
+            )
+        )
 
-        for predador in predadores:
+        celulas_reservadas = {p.cell for p in predadores}
+        presas_alvejadas = set()
+
+        for predador in predadores_ordenados:
             px, py = predador.cell.coordinate
+
+            # Prioriza presas que ainda não têm um predador designado
+            presas_disponiveis = [p for p in presas if p not in presas_alvejadas]
+            if not presas_disponiveis:
+                presas_disponiveis = presas
+
             presa_mais_proxima = min(
-                presas,
+                presas_disponiveis,
                 key=lambda p: self._distancia_chebyshev((px, py), p.cell.coordinate)
             )
 
+            presas_alvejadas.add(presa_mais_proxima)
             predador.alvo_atual = presa_mais_proxima
             alvo_coord = presa_mais_proxima.cell.coordinate
 
@@ -168,6 +204,8 @@ class Modelo(mesa.Model):
                 celulas_reservadas.add(predador.cell)
 
     def step(self):
+        inicio = time.perf_counter()
+
         # 1. Todos os ratos agem primeiro
         self.agents.select(agent_type=AgentePresa).shuffle_do("step")
 
@@ -179,3 +217,7 @@ class Modelo(mesa.Model):
 
         # 4. Atualiza as linhas tracejadas para exibição no gráfico
         self.orquestrar_predadores()
+
+        # 5. Registra o tempo do turno e coleta as métricas
+        self.tempo_ultimo_step_ms = (time.perf_counter() - inicio) * 1000
+        self.datacollector.collect(self)
