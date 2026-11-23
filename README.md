@@ -9,10 +9,10 @@ Simulação de predadores (gatos) e presas (ratos) em Python, desenvolvida com M
 | Random walk | Movimento aleatório entre vizinhos sem outro gato | Aleatório |
 | Central | Orquestrador com visão global e distribuição de alvos | Aleatório |
 | Central com fuga | Mesmo orquestrador central | Fuga ao detectar gatos na área 3×3 |
-| Individual | Cada gato escolhe a presa visível mais próxima, com alcance de 3 células | Aleatório |
-| Individual com fuga | Mesma decisão individual, sem negociação de alvos entre gatos | Fuga ao detectar gatos na área 3×3 |
+| Individual | Cada gato prioriza a presa visível mais próxima sem outro perseguidor, com alcance de 3 células | Aleatório |
+| Individual com fuga | Mesma decisão individual com consulta aos alvos dos outros gatos | Fuga ao detectar gatos na área 3×3 |
 
-O orquestrador central prioriza presas ainda sem um gato designado. Quando todas já têm um predador atribuído, permite compartilhar alvos. No modelo individual, vários gatos podem perseguir a mesma presa.
+O orquestrador central prioriza presas ainda sem um gato designado. Quando todas já têm um predador atribuído, permite compartilhar alvos. No modelo individual, cada gato consulta os alvos atuais dos demais e escolhe a presa visível mais próxima que esteja livre. Se todas as presas visíveis já tiverem um perseguidor, volta à sua primeira escolha, a presa mais próxima. A consulta ocorre na vez de cada gato, seguindo a ordem aleatória do turno.
 
 Todos utilizam um grid 10×10, sem conexão entre bordas, com movimentos nas oito direções. Os ratos agem primeiro e os gatos depois, em ordem aleatória dentro de cada grupo. Cada gato pode capturar no máximo uma presa por turno.
 

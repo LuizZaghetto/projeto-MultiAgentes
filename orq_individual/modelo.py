@@ -40,9 +40,14 @@ class AgentePredador(PredadorBase):
         ]
 
         if presas_visiveis and vizinhos_sem_gato:
-            # Escolhe a presa mais próxima de si mesmo (sem saber o que os outros gatos estão fazendo)
+            # Prioriza presas visíveis que ainda não são alvo de outro gato.
+            alvos_dos_outros = {
+                a.alvo_atual for a in self.model.agents
+                if isinstance(a, AgentePredador) and a is not self
+            }
+            presas_livres = [p for p in presas_visiveis if p not in alvos_dos_outros]
             alvo = min(
-                presas_visiveis,
+                presas_livres or presas_visiveis,
                 key=lambda p: self._distancia_chebyshev((px, py), p.cell.coordinate)
             )
             self.alvo_atual = alvo
