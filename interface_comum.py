@@ -216,7 +216,7 @@ def InterfaceSimulacao(titulo, modos, pasta_imagens):
                 if not controle.avancar(modelo_esperado=modelo_atual, cancelamento=cancelamento):
                     break
                 revisao.set(revisao.value + 1)
-                if cancelamento.wait(0.4):
+                if cancelamento.wait(0.8):
                     return
         finally:
             if not cancelamento.is_set():

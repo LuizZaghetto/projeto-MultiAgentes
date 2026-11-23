@@ -44,7 +44,7 @@ Execute uma interface por vez e abra o endereço exibido no terminal.
 
 As interfaces central e individual permitem alternar entre ratos aleatórios e ratos com fuga. Os controles compartilhados são:
 
-- **Reproduzir / Pausar:** avança automaticamente a cada 0,4 segundo.
+- **Reproduzir / Pausar:** avança automaticamente a cada 0,8 segundo.
 - **Avançar:** executa um turno.
 - **+5 turnos:** executa até cinco turnos, parando se a partida terminar.
 - **Reiniciar:** inicia outra partida no modo selecionado.
