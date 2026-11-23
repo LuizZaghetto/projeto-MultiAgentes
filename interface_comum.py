@@ -80,25 +80,31 @@ class PartidaVisual:
 
     def snapshot(self):
         with self.lock:
-            agentes = []
-            for agente in self.modelo.agents:
-                gato = isinstance(agente, self.modulo.AgentePredador)
-                alvo = getattr(agente, "alvo_atual", None)
-                agentes.append({
-                    "id": agente.unique_id,
-                    "gato": gato,
-                    "posicao": agente.cell.coordinate,
-                    "valor": agente.energy if gato else agente.peso,
-                    "alvo": alvo.cell.coordinate if alvo in self.modelo.agents else None,
-                })
             return {
                 "modelo": self.modelo,
                 "modo": self.modo,
-                "agentes": agentes,
                 "historico": [registro.copy() for registro in self.historico],
                 "resultado": self.resultado(),
-                "dimensoes": (self.modelo.grid.width, self.modelo.grid.height),
+                **estado_tabuleiro(self.modelo, self.modulo.AgentePredador),
             }
+
+
+def estado_tabuleiro(modelo, tipo_predador):
+    agentes = []
+    for agente in modelo.agents:
+        gato = isinstance(agente, tipo_predador)
+        alvo = getattr(agente, "alvo_atual", None)
+        agentes.append({
+            "id": agente.unique_id,
+            "gato": gato,
+            "posicao": agente.cell.coordinate,
+            "valor": agente.energy if gato else agente.peso,
+            "alvo": alvo.cell.coordinate if alvo is not None and alvo in modelo.agents else None,
+        })
+    return {
+        "agentes": agentes,
+        "dimensoes": (modelo.grid.width, modelo.grid.height),
+    }
 
 
 def figura_resultados(historico):

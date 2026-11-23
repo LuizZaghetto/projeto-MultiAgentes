@@ -1,24 +1,51 @@
 import sys
 from pathlib import Path
+
 import pandas as pd
-import matplotlib.pyplot as plt
+import solara
+from matplotlib.figure import Figure
 
-
-
-# serve para gerar a comparação entre os dois modelos
-
-# Garante que a raiz do projeto esteja no path para importar as duas pastas
-RAIZ = Path(__file__).resolve().parent
-sys.path.insert(0, str(RAIZ))
-
-# Ajuste o nome da pasta do orquestrador centralizado se necessário
 from orq_geral import modelo as central_padrao
 from orq_geral import modelo_fuga_rato as central_fuga
 from orq_individual import modelo as indiv_padrao
 from orq_individual import modelo_fuga_rato as indiv_fuga
 
 
-def rodar_experimento(modulo, arquitetura, tipo_presa, num_jogos=100, max_steps=1000):
+JOGOS_POR_CENARIO = 100
+LIMITE_TURNOS = 1000
+CENARIOS = (
+    (central_padrao, "Orquestrador", "Rato Aleatório"),
+    (central_fuga, "Orquestrador", "Rato Fuga 3x3"),
+    (indiv_padrao, "Individual", "Rato Aleatório"),
+    (indiv_fuga, "Individual", "Rato Fuga 3x3"),
+)
+
+
+def jogar_partida(modulo, semente, max_steps=LIMITE_TURNOS, *, ao_registrar_turno=None, cancelamento=None):
+    """Executa uma partida e devolve o modelo final e o resultado."""
+    modelo = modulo.Modelo(verbose=False, rng=semente)
+    while cancelamento is None or not cancelamento.is_set():
+        if ao_registrar_turno is not None:
+            ao_registrar_turno(modelo)
+
+        if not modelo.agents.select(agent_type=modulo.AgentePresa):
+            return modelo, "Vitória dos gatos"
+        if not modelo.agents.select(agent_type=modulo.AgentePredador):
+            return modelo, "Vitória dos ratos"
+        if modelo.steps >= max_steps:
+            return modelo, "Limite de turnos"
+        modelo.step()
+
+    raise InterruptedError("Experimento interrompido.")
+
+
+def rodar_experimento(
+    modulo, arquitetura, tipo_presa, num_jogos=JOGOS_POR_CENARIO, max_steps=LIMITE_TURNOS,
+    *, ao_concluir_partida=None, cancelamento=None, exibir_progresso=True,
+):
+    if num_jogos < 1:
+        raise ValueError("O número de jogos deve ser positivo.")
+
     vitorias_pred = 0
     vitorias_presa = 0
     empates_timeout = 0
@@ -30,35 +57,21 @@ def rodar_experimento(modulo, arquitetura, tipo_presa, num_jogos=100, max_steps=
     dispersoes_medias = []
     tempos_step_ms = []
 
-    nome_completo = f"{arquitetura} | {tipo_presa}"
-    print(f"\nIniciando {num_jogos} jogos -> [{nome_completo}]...")
+    if exibir_progresso:
+        print(f"\nIniciando {num_jogos} jogos -> [{arquitetura} | {tipo_presa}]...")
 
     for i in range(1, num_jogos + 1):
-        # Usa seed=i para garantir que ambas as arquiteturas enfrentem exatamente os mesmos mapas iniciais
-        modelo = modulo.Modelo(verbose=False, rng=i)
-
-        while True:
-            total_pred = sum(1 for a in modelo.agents if isinstance(a, modulo.AgentePredador))
-            total_presa = sum(1 for a in modelo.agents if isinstance(a, modulo.AgentePresa))
-
-            if total_presa == 0:
-                vitorias_pred += 1
-                turnos_totais.append(modelo.steps)
-                turnos_vitoria_pred.append(modelo.steps)
-                sobreviventes = [a for a in modelo.agents if isinstance(a, modulo.AgentePredador)]
-                if sobreviventes:
-                    energias_vencedoras.extend([p.energy for p in sobreviventes])
-                break
-            elif total_pred == 0:
-                vitorias_presa += 1
-                turnos_totais.append(modelo.steps)
-                break
-            elif modelo.steps >= max_steps:
-                empates_timeout += 1
-                turnos_totais.append(modelo.steps)
-                break
-
-            modelo.step()
+        modelo, resultado = jogar_partida(modulo, i, max_steps, cancelamento=cancelamento)
+        turnos_totais.append(modelo.steps)
+        if resultado == "Vitória dos gatos":
+            vitorias_pred += 1
+            turnos_vitoria_pred.append(modelo.steps)
+            sobreviventes = modelo.agents.select(agent_type=modulo.AgentePredador)
+            energias_vencedoras.extend(p.energy for p in sobreviventes)
+        elif resultado == "Vitória dos ratos":
+            vitorias_presa += 1
+        else:
+            empates_timeout += 1
 
         # Extrai as séries coletadas pelo DataCollector nesta partida
         df_jogo = modelo.datacollector.get_model_vars_dataframe()
@@ -74,7 +87,9 @@ def rodar_experimento(modulo, arquitetura, tipo_presa, num_jogos=100, max_steps=
         if "Tempo_Step_ms" in df_jogo.columns and len(df_jogo) > 1:
             tempos_step_ms.append(df_jogo["Tempo_Step_ms"].iloc[1:].mean())
 
-        if i % 25 == 0 or i == num_jogos:
+        if ao_concluir_partida is not None:
+            ao_concluir_partida(i, resultado, modelo.steps)
+        if exibir_progresso and (i % 25 == 0 or i == num_jogos):
             print(f"  Progresso: {i}/{num_jogos}")
 
     return {
@@ -93,8 +108,9 @@ def rodar_experimento(modulo, arquitetura, tipo_presa, num_jogos=100, max_steps=
     }
 
 
-def gerar_graficos_comparativos(df_resumo, arquivo_saida="comparativo_arquiteturas.png"):
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+def figura_comparativa(df_resumo):
+    fig = Figure(figsize=(12, 8))
+    axes = fig.subplots(2, 2)
     cenarios = [f"{r['Arquitetura']}\n({r['Presa']})" for _, r in df_resumo.iterrows()]
     cores = ["#2b5c8f", "#1f77b4", "#d95f02", "#e6ab02"]
 
@@ -124,24 +140,26 @@ def gerar_graficos_comparativos(df_resumo, arquivo_saida="comparativo_arquitetur
     for ax in axes.flat:
         ax.tick_params(axis="x", labelsize=8)
 
-    plt.tight_layout()
-    plt.savefig(arquivo_saida, dpi=150)
+    fig.tight_layout()
+    return fig
+
+
+def gerar_graficos_comparativos(df_resumo, arquivo_saida="comparativo_arquiteturas.png"):
+    figura_comparativa(df_resumo).savefig(arquivo_saida, dpi=150)
     print(f"\nGráfico comparativo salvo em: {arquivo_saida}")
 
 
-if __name__ == "__main__":
-    N_JOGOS = 100
+@solara.component
+def Page():
+    from app_comparativo import Page as PaginaComparativo
 
-    experimentos = [
-        (central_padrao, "Orquestrador", "Rato Aleatório"),
-        (central_fuga,   "Orquestrador", "Rato Fuga 3x3"),
-        (indiv_padrao,   "Individual",   "Rato Aleatório"),
-        (indiv_fuga,     "Individual",   "Rato Fuga 3x3"),
-    ]
+    PaginaComparativo()
 
+
+def executar_no_terminal():
     resultados = [
-        rodar_experimento(mod, arq, presa, num_jogos=N_JOGOS)
-        for mod, arq, presa in experimentos
+        rodar_experimento(mod, arq, presa)
+        for mod, arq, presa in CENARIOS
     ]
 
     df_final = pd.DataFrame(resultados)
@@ -153,3 +171,9 @@ if __name__ == "__main__":
     df_final.to_csv("resultados_comparativos.csv", index=False)
     print("\nTabela salva em: resultados_comparativos.csv")
     gerar_graficos_comparativos(df_final)
+
+
+# O Solara também usa __name__ == "__main__" ao carregar páginas Python.
+# O lote no terminal só começa quando o Python executa este arquivo diretamente.
+if __name__ == "__main__" and Path(sys.argv[0]).resolve() == Path(__file__).resolve():
+    executar_no_terminal()

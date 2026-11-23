@@ -102,6 +102,16 @@ São calculadas vitórias dos gatos, vitórias dos ratos, empates por limite de 
 
 ### Comparação entre arquiteturas
 
+Para abrir o comparativo interativo no Solara:
+
+```powershell
+.\.venv\Scripts\solara.exe run experimento_comparativo.py
+```
+
+Clique em **Simular 400 partidas**. Ao concluir, use **Resultados** para explorar as métricas e baixar o CSV ou o PNG. Em **Partidas**, selecione o cenário e a semente para rever o tabuleiro turno a turno. A interface oferece os arquivos para download e guarda o resultado da execução na sessão.
+
+Para rodar pelo terminal e salvar os arquivos na pasta de execução:
+
 ```powershell
 .\.venv\Scripts\python.exe experimento_comparativo.py
 ```
@@ -142,6 +152,7 @@ regras_comuns.py               # Regras e inicialização dos cinco modelos
 interface_comum.py             # Estado e componentes das interfaces
 interface.css                  # Estilos compartilhados e layout final
 experimento_comparativo.py     # Comparação dos quatro modelos de perseguição
+app_comparativo.py             # Comparativo interativo e replay das partidas
 resultados_comparativos.csv
 comparativo_arquiteturas.png
 requirements.txt
